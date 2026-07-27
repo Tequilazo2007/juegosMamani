@@ -12,746 +12,105 @@ window.onerror = function (msg, url, lineNo, columnNo, error) {
 };
 
 /* ==========================================================================
-   SISTEMA DE AUDIO — Web Audio API
-   Genera todos los sonidos proceduralmente. Sin archivos externos.
+   SISTEMA DE AUDIO — Archivos de Audio Reales
    ========================================================================== */
 const sistemaAudio = {
-    ctx: null,
     volumenMusica: 0.35,
     volumenSFX: 0.55,
-    silenciado: true, // Silenciado por defecto a petición de usuario
-    _nodosMusicaActual: [],   // osciladores / fuentes activos del tema en loop
-    _gainMusicaActual: null,  // GainNode de la música activa
+    silenciado: false, // Activado por defecto para escuchar la nueva música
+    _bgmActual: null,
     _estadoMusicaActual: null,
 
-    // ── Inicialización (debe llamarse tras un gesto del usuario) ───────────
-    inicializar() {
-        if (this.ctx) return;
-        try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        } catch (e) {
-            console.warn('Web Audio API no disponible:', e);
-        }
+    // Mapeo de BGM
+    _bgmTracks: {
+        MENU: 'audio/bgm_menu.mp3',
+        MAPA: 'audio/bgm_mapa.mp3',
+        COMBATE: 'audio/bgm_combate.mp3',
+        TIENDA: 'audio/bgm_tienda.mp3',
+        CAMPAMENTO: 'audio/bgm_campamento.mp3',
+        EVENTO: 'audio/bgm_evento.mp3',
+        CUTSCENE: 'audio/bgm_cutscene.mp3',
+        TUTORIAL: 'audio/bgm_tutorial.mp3',
+        TUTORIAL_COMPLETO: 'audio/bgm_mapa.mp3',
+        RECOMPENSA: 'audio/bgm_recompensa.mp3',
+        VICTORIA: 'audio/bgm_victoria.mp3',
+        GAMEOVER: 'audio/bgm_gameover.mp3'
     },
 
-    // ── Silenciar / activar ───────────────────────────────────────────────
+    // Mapeo de SFX
+    _sfxTracks: {
+        hover: 'audio/sfx_hover.mp3',
+        click: 'audio/sfx_click.mp3',
+        confirmar: 'audio/sfx_confirmar.mp3',
+        confirmarEpico: 'audio/sfx_confirmar_epico.mp3',
+        retroceder: 'audio/sfx_retroceder.mp3',
+        ataque: 'audio/sfx_ataque.mp3',
+        escudo: 'audio/sfx_escudo.mp3',
+        curacion: 'audio/sfx_curacion.mp3',
+        danoJugador: 'audio/sfx_dano_jugador.mp3',
+        danoEnemigo: 'audio/sfx_dano_enemigo.mp3',
+        finTurno: 'audio/sfx_fin_turno.mp3',
+        huir: 'audio/sfx_huir.mp3',
+        enemigoAtaca: 'audio/sfx_enemigo_ataca.mp3',
+        nodoSeleccionar: 'audio/sfx_nodo.mp3',
+        entrarCombate: 'audio/sfx_entrar_combate.mp3',
+        entrarTienda: 'audio/sfx_entrar_tienda.mp3',
+        entrarEvento: 'audio/sfx_entrar_evento.mp3',
+        entrarCampamento: 'audio/sfx_entrar_campamento.mp3',
+        compra: 'audio/sfx_compra.mp3',
+        error: 'audio/sfx_error.mp3',
+        descanso: 'audio/sfx_descanso.mp3',
+        mejora: 'audio/sfx_mejora.mp3',
+        eleccion: 'audio/sfx_eleccion.mp3',
+        eventoBien: 'audio/sfx_evento_bien.mp3',
+        eventoMal: 'audio/sfx_evento_mal.mp3',
+        recompensa: 'audio/sfx_recompensa.mp3'
+    },
+
+    inicializar() {
+        // En HTML5 Audio no se necesita contexto global de inicialización
+    },
+
     toggleMute() {
         this.silenciado = !this.silenciado;
-        if (this._gainMusicaActual) {
-            this._gainMusicaActual.gain.setTargetAtTime(
-                this.silenciado ? 0 : this.volumenMusica,
-                this.ctx.currentTime, 0.1
-            );
+        if (this._bgmActual) {
+            this._bgmActual.volume = this.silenciado ? 0 : this.volumenMusica;
         }
     },
 
-    // ── Detener música actual con fade-out ────────────────────────────────
-    _detenerMusica(durFade = 0.4) {
-        if (!this._gainMusicaActual) return;
-        const g = this._gainMusicaActual;
-        g.gain.setTargetAtTime(0, this.ctx.currentTime, durFade / 3);
-        const nodos = this._nodosMusicaActual.slice();
-        setTimeout(() => {
-            nodos.forEach(n => { try { n.stop(); } catch (_) { } });
-        }, durFade * 1000 + 100);
-        this._nodosMusicaActual = [];
-        this._gainMusicaActual = null;
-    },
-
-    // ── Reproducir tema según estado ──────────────────────────────────────
     reproducirMusica(estado) {
-        if (!this.ctx) return;
-        if (this._estadoMusicaActual === estado) return; // ya suena
+        if (this._estadoMusicaActual === estado) return;
         this._estadoMusicaActual = estado;
-        this._detenerMusica(0.5);
-        if (this.silenciado) return;
-        setTimeout(() => {
-            if (this._estadoMusicaActual !== estado) return; // cambió antes del fade
-            const fn = this._temas[estado];
-            if (fn) fn.call(this);
-        }, 500);
-    },
 
-    // ── Tocar un SFX de una vez ───────────────────────────────────────────
-    sfx(nombre) {
-        if (!this.ctx || this.silenciado) return;
-        const fn = this._sfx[nombre];
-        if (fn) fn.call(this);
-    },
+        if (this._bgmActual) {
+            this._bgmActual.pause();
+            this._bgmActual.currentTime = 0;
+            this._bgmActual = null;
+        }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // UTILIDAD: crea un oscilador simple con envelope
-    _osc(freq, type, atk, sus, rel, vol, dest, inicio) {
-        const t = inicio !== undefined ? inicio : this.ctx.currentTime;
-        const g = this.ctx.createGain();
-        g.connect(dest || this.ctx.destination);
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(vol, t + atk);
-        g.gain.setValueAtTime(vol, t + atk + sus);
-        g.gain.linearRampToValueAtTime(0, t + atk + sus + rel);
-        const osc = this.ctx.createOscillator();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, t);
-        osc.connect(g);
-        osc.start(t);
-        osc.stop(t + atk + sus + rel + 0.05);
-        return osc;
-    },
-
-    // ──────────────────────────────────────────────────────────────────────
-    // TEMAS DE MÚSICA (loops procedurales)
-    // ──────────────────────────────────────────────────────────────────────
-    _temas: {
-
-        // ── MENÚ PRINCIPAL: épico andino, lento ──────────────────────────
-        MENU() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [220, 246.94, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94];
-            const durNota = 0.7;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'MENU') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(f, t + i * durNota);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0, t + i * durNota);
-                    g.gain.linearRampToValueAtTime(0.6, t + i * durNota + 0.05);
-                    g.gain.setValueAtTime(0.6, t + i * durNota + durNota - 0.1);
-                    g.gain.linearRampToValueAtTime(0, t + i * durNota + durNota);
-                    osc.connect(g);
-                    g.connect(masterGain);
-                    osc.start(t + i * durNota);
-                    osc.stop(t + i * durNota + durNota + 0.05);
-                    nodos.push(osc);
-
-                    // Bajo armónico
-                    const bajo = c.createOscillator();
-                    bajo.type = 'triangle';
-                    bajo.frequency.setValueAtTime(f / 2, t + i * durNota);
-                    const gb = c.createGain();
-                    gb.gain.setValueAtTime(0.25, t + i * durNota);
-                    gb.gain.linearRampToValueAtTime(0, t + i * durNota + durNota);
-                    bajo.connect(gb);
-                    gb.connect(masterGain);
-                    bajo.start(t + i * durNota);
-                    bajo.stop(t + i * durNota + durNota + 0.05);
-                    nodos.push(bajo);
-                });
-                t += notas.length * durNota;
-                setTimeout(ciclo, (notas.length * durNota - 0.2) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── MAPA: exploración tranquila, flauta ──────────────────────────
-        MAPA() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.85, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const escala = [261.63, 293.66, 329.63, 349.23, 392, 440, 493.88];
-            const patron = [0, 2, 4, 3, 2, 0, 1, 3];
-            const dur = 0.5;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'MAPA') return;
-                patron.forEach((idx, i) => {
-                    const freq = escala[idx];
-                    const osc = c.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0.45, t + i * dur + 0.04);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.8);
-                    osc.connect(g);
-                    g.connect(masterGain);
-                    osc.start(t + i * dur);
-                    osc.stop(t + i * dur + dur);
-                    nodos.push(osc);
-                });
-                t += patron.length * dur;
-                setTimeout(ciclo, (patron.length * dur - 0.15) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── COMBATE: rítmico y tenso ─────────────────────────────────────
-        COMBATE() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const nodos = [];
-            const bpm = 140;
-            const beat = 60 / bpm;
-            let t = c.currentTime;
-
-            // Patrón de percusión grave (kick)
-            const patronKick = [1, 0, 0, 0, 1, 0, 0, 0];
-            // Melodía tensa
-            const melodia = [110, 0, 130.81, 0, 146.83, 123.47, 0, 110];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'COMBATE') return;
-                for (let i = 0; i < 8; i++) {
-                    // Kick
-                    if (patronKick[i]) {
-                        const osc = c.createOscillator();
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(150, t + i * beat);
-                        osc.frequency.exponentialRampToValueAtTime(30, t + i * beat + 0.15);
-                        const g = c.createGain();
-                        g.gain.setValueAtTime(0.7, t + i * beat);
-                        g.gain.exponentialRampToValueAtTime(0.001, t + i * beat + 0.2);
-                        osc.connect(g); g.connect(masterGain);
-                        osc.start(t + i * beat); osc.stop(t + i * beat + 0.25);
-                        nodos.push(osc);
-                    }
-                    // Melodía
-                    if (melodia[i] > 0) {
-                        const osc2 = c.createOscillator();
-                        osc2.type = 'sawtooth';
-                        osc2.frequency.setValueAtTime(melodia[i], t + i * beat);
-                        const g2 = c.createGain();
-                        g2.gain.setValueAtTime(0.15, t + i * beat);
-                        g2.gain.linearRampToValueAtTime(0, t + i * beat + beat * 0.9);
-                        osc2.connect(g2); g2.connect(masterGain);
-                        osc2.start(t + i * beat); osc2.stop(t + i * beat + beat);
-                        nodos.push(osc2);
-                    }
-                }
-                t += 8 * beat;
-                setTimeout(ciclo, (8 * beat - 0.05) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── TIENDA: alegre y misterioso ──────────────────────────────────
-        TIENDA() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.75, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [392, 440, 523.25, 440, 392, 349.23, 392, 440];
-            const dur = 0.45;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'TIENDA') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0.35, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.85);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur;
-                setTimeout(ciclo, (notas.length * dur - 0.1) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── CAMPAMENTO: paz y descanso ───────────────────────────────────
-        CAMPAMENTO() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.7, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [261.63, 329.63, 392, 329.63, 261.63, 293.66, 261.63];
-            const dur = 0.9;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'CAMPAMENTO') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0.3, t + i * dur + 0.1);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.9);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur + 0.1);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur;
-                setTimeout(ciclo, (notas.length * dur - 0.2) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── EVENTO: misterioso y tenso ───────────────────────────────────
-        EVENTO() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.6, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const nodos = [];
-            // Drone grave oscilante
-            const drone = c.createOscillator();
-            drone.type = 'sawtooth';
-            drone.frequency.setValueAtTime(55, c.currentTime);
-            const droneGain = c.createGain();
-            droneGain.gain.setValueAtTime(0.08, c.currentTime);
-            drone.connect(droneGain); droneGain.connect(masterGain);
-            drone.start();
-            nodos.push(drone);
-
-            const notas = [155.56, 164.81, 155.56, 146.83, 155.56];
-            const dur = 1.1;
-            let t = c.currentTime;
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'EVENTO') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0.2, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.8);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur;
-                setTimeout(ciclo, (notas.length * dur - 0.15) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── CUTSCENE: ambiental, épico lento ─────────────────────────────
-        CUTSCENE() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.65, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [196, 220, 246.94, 261.63, 220];
-            const dur = 1.2;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'CUTSCENE') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0.4, t + i * dur + 0.2);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur - 0.1);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur;
-                setTimeout(ciclo, (notas.length * dur - 0.2) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── TUTORIAL: amigable ───────────────────────────────────────────
-        TUTORIAL() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.7, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [329.63, 392, 440, 392, 329.63, 293.66, 329.63];
-            const dur = 0.5;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'TUTORIAL') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'square';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0.12, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.7);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur;
-                setTimeout(ciclo, (notas.length * dur - 0.1) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── TUTORIAL COMPLETO: triunfal breve ────────────────────────────
-        TUTORIAL_COMPLETO() { sistemaAudio._temas.MAPA.call(this); },
-
-        // ── RECOMPENSA: brillante ────────────────────────────────────────
-        RECOMPENSA() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica * 0.8, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [523.25, 587.33, 659.25, 698.46, 659.25, 587.33];
-            const dur = 0.55;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'RECOMPENSA') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0.3, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.8);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur;
-                setTimeout(ciclo, (notas.length * dur - 0.1) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── VICTORIA: fanfarria ──────────────────────────────────────────
-        VICTORIA() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [523.25, 523.25, 523.25, 659.25, 587.33, 698.46, 784];
-            const durs = [0.15, 0.15, 0.15, 0.35, 0.2, 0.2, 0.6];
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'VICTORIA') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'square';
-                    osc.frequency.setValueAtTime(f, t + (durs.slice(0, i).reduce((a, b) => a + b, 0)));
-                    const g = c.createGain();
-                    const offset = durs.slice(0, i).reduce((a, b) => a + b, 0);
-                    g.gain.setValueAtTime(0.3, t + offset);
-                    g.gain.linearRampToValueAtTime(0, t + offset + durs[i] * 0.9);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + offset); osc.stop(t + offset + durs[i]);
-                    nodos.push(osc);
-                });
-                t += durs.reduce((a, b) => a + b, 0) + 1.5;
-                setTimeout(ciclo, (durs.reduce((a, b) => a + b, 0) + 1.5 - 0.1) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
-        },
-
-        // ── GAME OVER: triste ────────────────────────────────────────────
-        GAMEOVER() {
-            const c = sistemaAudio.ctx;
-            const masterGain = c.createGain();
-            masterGain.gain.setValueAtTime(sistemaAudio.volumenMusica, c.currentTime);
-            masterGain.connect(c.destination);
-            sistemaAudio._gainMusicaActual = masterGain;
-
-            const notas = [261.63, 233.08, 220, 196, 174.61];
-            const dur = 0.8;
-            let t = c.currentTime;
-            const nodos = [];
-
-            function ciclo() {
-                if (sistemaAudio._estadoMusicaActual !== 'GAMEOVER') return;
-                notas.forEach((f, i) => {
-                    const osc = c.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(f, t + i * dur);
-                    const g = c.createGain();
-                    g.gain.setValueAtTime(0.4, t + i * dur);
-                    g.gain.linearRampToValueAtTime(0, t + i * dur + dur * 0.95);
-                    osc.connect(g); g.connect(masterGain);
-                    osc.start(t + i * dur); osc.stop(t + i * dur + dur + 0.05);
-                    nodos.push(osc);
-                });
-                t += notas.length * dur + 1.5;
-                setTimeout(ciclo, (notas.length * dur + 1.5 - 0.1) * 1000);
-            }
-            sistemaAudio._nodosMusicaActual = nodos;
-            ciclo();
+        const trackUrl = this._bgmTracks[estado];
+        if (trackUrl) {
+            this._bgmActual = new Audio(trackUrl);
+            this._bgmActual.loop = true;
+            this._bgmActual.volume = this.silenciado ? 0 : this.volumenMusica;
+            this._bgmActual.play().catch(e => {
+                console.warn("Navegador bloqueó autoplay de BGM:", e);
+            });
         }
     },
 
-    // ──────────────────────────────────────────────────────────────────────
-    // EFECTOS DE SONIDO (SFX)
-    // ──────────────────────────────────────────────────────────────────────
-    _sfx: {
-
-        // ── Botones UI / Menú ─────────────────────────────────────────────
-        hover() {
-            sistemaAudio._osc(880, 'sine', 0.01, 0.02, 0.04, 0.15);
-        },
-        click() {
-            const c = sistemaAudio.ctx;
-            sistemaAudio._osc(660, 'square', 0.005, 0.03, 0.06, 0.18);
-        },
-        confirmar() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(523.25, 'triangle', 0.01, 0.05, 0.08, 0.3, null, t);
-            sistemaAudio._osc(659.25, 'triangle', 0.01, 0.05, 0.08, 0.3, null, t + 0.08);
-            sistemaAudio._osc(784, 'triangle', 0.01, 0.05, 0.15, 0.3, null, t + 0.16);
-        },
-        confirmarEpico() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(261.63, 'sawtooth', 0.01, 0.08, 0.12, 0.4, null, t);
-            sistemaAudio._osc(329.63, 'sawtooth', 0.01, 0.08, 0.12, 0.35, null, t + 0.1);
-            sistemaAudio._osc(392, 'sawtooth', 0.01, 0.08, 0.2, 0.35, null, t + 0.2);
-        },
-        retroceder() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(523.25, 'sine', 0.01, 0.03, 0.08, 0.2, null, t);
-            sistemaAudio._osc(392, 'sine', 0.01, 0.03, 0.12, 0.2, null, t + 0.09);
-        },
-
-        // ── Combate ───────────────────────────────────────────────────────
-        ataque() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            const osc = c.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(220, t);
-            osc.frequency.exponentialRampToValueAtTime(110, t + 0.12);
-            const g = c.createGain();
-            g.gain.setValueAtTime(0.5, t);
-            g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-            osc.connect(g); g.connect(c.destination);
-            osc.start(t); osc.stop(t + 0.2);
-        },
-        escudo() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(1046.5, 'triangle', 0.005, 0.02, 0.15, 0.35, null, t);
-            sistemaAudio._osc(1318.5, 'triangle', 0.005, 0.02, 0.12, 0.3, null, t + 0.04);
-        },
-        curacion() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(523.25, 'sine', 0.01, 0.04, 0.1, 0.25, null, t);
-            sistemaAudio._osc(659.25, 'sine', 0.01, 0.04, 0.1, 0.25, null, t + 0.07);
-            sistemaAudio._osc(784, 'sine', 0.01, 0.05, 0.2, 0.25, null, t + 0.14);
-        },
-        danoJugador() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            const osc = c.createOscillator();
-            osc.type = 'square';
-            osc.frequency.setValueAtTime(180, t);
-            osc.frequency.exponentialRampToValueAtTime(60, t + 0.2);
-            const g = c.createGain();
-            g.gain.setValueAtTime(0.45, t);
-            g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-            osc.connect(g); g.connect(c.destination);
-            osc.start(t); osc.stop(t + 0.28);
-        },
-        danoEnemigo() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            const osc = c.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(400, t);
-            osc.frequency.exponentialRampToValueAtTime(200, t + 0.1);
-            const g = c.createGain();
-            g.gain.setValueAtTime(0.4, t);
-            g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-            osc.connect(g); g.connect(c.destination);
-            osc.start(t); osc.stop(t + 0.18);
-        },
-        finTurno() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(392, 'triangle', 0.005, 0.04, 0.12, 0.28, null, t);
-            sistemaAudio._osc(523.25, 'triangle', 0.005, 0.04, 0.18, 0.25, null, t + 0.09);
-        },
-        huir() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            const osc = c.createOscillator();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(880, t);
-            osc.frequency.exponentialRampToValueAtTime(220, t + 0.3);
-            const g = c.createGain();
-            g.gain.setValueAtTime(0.3, t);
-            g.gain.linearRampToValueAtTime(0, t + 0.35);
-            osc.connect(g); g.connect(c.destination);
-            osc.start(t); osc.stop(t + 0.38);
-        },
-        enemigoAtaca() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            const osc = c.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(100, t);
-            osc.frequency.linearRampToValueAtTime(140, t + 0.05);
-            osc.frequency.exponentialRampToValueAtTime(60, t + 0.22);
-            const g = c.createGain();
-            g.gain.setValueAtTime(0.5, t);
-            g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-            osc.connect(g); g.connect(c.destination);
-            osc.start(t); osc.stop(t + 0.32);
-        },
-
-        // ── Mapa ──────────────────────────────────────────────────────────
-        nodoSeleccionar() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(659.25, 'sine', 0.01, 0.03, 0.1, 0.25, null, t);
-            sistemaAudio._osc(880, 'sine', 0.01, 0.03, 0.1, 0.2, null, t + 0.06);
-        },
-        entrarCombate() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(196, 'sawtooth', 0.01, 0.05, 0.08, 0.4, null, t);
-            sistemaAudio._osc(233.08, 'sawtooth', 0.01, 0.05, 0.08, 0.4, null, t + 0.08);
-            sistemaAudio._osc(261.63, 'sawtooth', 0.01, 0.06, 0.15, 0.4, null, t + 0.16);
-        },
-        entrarTienda() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(784, 'triangle', 0.01, 0.03, 0.08, 0.28, null, t);
-            sistemaAudio._osc(1046.5, 'triangle', 0.01, 0.03, 0.12, 0.25, null, t + 0.07);
-        },
-        entrarEvento() {
-            const c = sistemaAudio.ctx;
-            const osc = c.createOscillator();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(440, c.currentTime);
-            osc.frequency.linearRampToValueAtTime(330, c.currentTime + 0.4);
-            const g = c.createGain();
-            g.gain.setValueAtTime(0.3, c.currentTime);
-            g.gain.linearRampToValueAtTime(0, c.currentTime + 0.45);
-            osc.connect(g); g.connect(c.destination);
-            osc.start(); osc.stop(c.currentTime + 0.5);
-        },
-        entrarCampamento() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(329.63, 'sine', 0.02, 0.06, 0.2, 0.25, null, t);
-            sistemaAudio._osc(392, 'sine', 0.02, 0.06, 0.25, 0.22, null, t + 0.1);
-        },
-
-        // ── Tienda ────────────────────────────────────────────────────────
-        compra() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(784, 'sine', 0.005, 0.03, 0.06, 0.3, null, t);
-            sistemaAudio._osc(1046.5, 'sine', 0.005, 0.03, 0.06, 0.3, null, t + 0.06);
-            sistemaAudio._osc(1318.5, 'sine', 0.005, 0.04, 0.15, 0.3, null, t + 0.12);
-        },
-        error() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(150, 'square', 0.005, 0.06, 0.06, 0.3, null, t);
-            sistemaAudio._osc(140, 'square', 0.005, 0.06, 0.06, 0.28, null, t + 0.08);
-        },
-
-        // ── Campamento ────────────────────────────────────────────────────
-        descanso() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(261.63, 'sine', 0.02, 0.1, 0.3, 0.22, null, t);
-            sistemaAudio._osc(329.63, 'sine', 0.02, 0.1, 0.3, 0.2, null, t + 0.12);
-            sistemaAudio._osc(392, 'sine', 0.02, 0.1, 0.4, 0.2, null, t + 0.24);
-        },
-        mejora() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            [523.25, 587.33, 659.25, 783.99, 880, 1046.5].forEach((f, i) => {
-                sistemaAudio._osc(f, 'triangle', 0.01, 0.03, 0.08, 0.2, null, t + i * 0.06);
-            });
-        },
-
-        // ── Evento ────────────────────────────────────────────────────────
-        eleccion() {
-            const c = sistemaAudio.ctx;
-            sistemaAudio._osc(440, 'triangle', 0.01, 0.04, 0.12, 0.25, null, c.currentTime);
-        },
-        eventoBien() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(523.25, 'triangle', 0.01, 0.05, 0.1, 0.28, null, t);
-            sistemaAudio._osc(659.25, 'triangle', 0.01, 0.05, 0.1, 0.25, null, t + 0.08);
-            sistemaAudio._osc(784, 'triangle', 0.01, 0.06, 0.2, 0.25, null, t + 0.16);
-        },
-        eventoMal() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            sistemaAudio._osc(330, 'sawtooth', 0.01, 0.05, 0.1, 0.3, null, t);
-            sistemaAudio._osc(311, 'sawtooth', 0.01, 0.05, 0.1, 0.28, null, t + 0.08);
-            sistemaAudio._osc(277, 'sawtooth', 0.01, 0.06, 0.2, 0.28, null, t + 0.16);
-        },
-
-        // ── Recompensa ────────────────────────────────────────────────────
-        recompensa() {
-            const c = sistemaAudio.ctx;
-            const t = c.currentTime;
-            [659.25, 784, 1046.5].forEach((f, i) => {
-                sistemaAudio._osc(f, 'triangle', 0.005, 0.04, 0.1, 0.35, null, t + i * 0.07);
-            });
-        },
-
-        // ── Mute toggle ───────────────────────────────────────────────────
-        mute() {
-            // No sonido al mutear (por diseño)
+    sfx(nombre) {
+        if (this.silenciado) return;
+        const trackUrl = this._sfxTracks[nombre];
+        if (trackUrl) {
+            const sonido = new Audio(trackUrl);
+            sonido.volume = this.volumenSFX;
+            sonido.play().catch(e => {});
         }
     }
 };
+
+
 
 
 
@@ -2144,8 +1503,6 @@ function dibujarEfectosEspeciales() {
             gradHoja.addColorStop(0.65, '#d8d8d8');
             gradHoja.addColorStop(1, '#707070');
             ctx.fillStyle = gradHoja;
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(-14, -2.5);   // talon de hoja
             ctx.lineTo(11, -0.5);    // punta superior
@@ -2157,7 +1514,6 @@ function dibujarEfectosEspeciales() {
             // Linea de filo brillante
             ctx.strokeStyle = 'rgba(255,255,255,0.9)';
             ctx.lineWidth = 0.8;
-            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(-13, -2);
             ctx.lineTo(11, -0.5);
@@ -2165,7 +1521,6 @@ function dibujarEfectosEspeciales() {
 
             // Guarda metalica
             ctx.fillStyle = '#8B6914';
-            ctx.shadowBlur = 0;
             ctx.fillRect(-17, -3.5, 4, 8);
             ctx.strokeStyle = '#5a4000';
             ctx.lineWidth = 0.5;
@@ -2196,8 +1551,6 @@ function dibujarEfectosEspeciales() {
             grad.addColorStop(0.4, p.cfg.proyectilColor2);
             grad.addColorStop(1, p.cfg.proyectilColor);
             ctx.fillStyle = grad;
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
@@ -2217,8 +1570,6 @@ function dibujarEfectosEspeciales() {
             grad.addColorStop(0.5, p.cfg.proyectilColor2);
             grad.addColorStop(1, p.cfg.proyectilColor);
             ctx.fillStyle = grad;
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
@@ -2235,8 +1586,6 @@ function dibujarEfectosEspeciales() {
             ctx.rotate(Math.sin(Date.now() / 120) * 0.3);
             const hs = 0.9 + Math.sin(Date.now() / 80) * 0.06;
             ctx.scale(hs, hs);
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             const gradHoja2 = ctx.createLinearGradient(-8, -6, 8, 6);
             gradHoja2.addColorStop(0, '#145a32');
             gradHoja2.addColorStop(0.4, '#27ae60');
@@ -2248,7 +1597,6 @@ function dibujarEfectosEspeciales() {
             ctx.fill();
             ctx.strokeStyle = '#0b3a21';
             ctx.lineWidth = 0.9;
-            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(-7, 1);
             ctx.quadraticCurveTo(0, -0.5, 7, -1);
@@ -2259,7 +1607,6 @@ function dibujarEfectosEspeciales() {
                 ctx.beginPath(); ctx.moveTo(bx, 0.5); ctx.quadraticCurveTo(bx + 1, ex, bx + 3, -0.5); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(bx, 0.5); ctx.quadraticCurveTo(bx + 1, -ex, bx + 3, 1.5); ctx.stroke();
             });
-            ctx.shadowBlur = 0;
             ctx.fillStyle = 'rgba(255,255,255,0.4)';
             ctx.beginPath();
             ctx.ellipse(-2, -2.5, 2.5, 1.2, -0.4, 0, Math.PI * 2);
@@ -2276,26 +1623,19 @@ function dibujarEfectosEspeciales() {
             // === MAL DE OJO: OJO MALIGNO GIRANDO ===
             ctx.rotate(Math.sin(Date.now() / 200) * 0.2);
             ctx.fillStyle = '#150025';
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.ellipse(0, 0, 11, 7.5, 0, 0, Math.PI * 2); ctx.fill();
             const gradIris = ctx.createRadialGradient(0, 0, 0, 0, 0, 5.5);
             gradIris.addColorStop(0, '#ff2200');
             gradIris.addColorStop(0.5, '#990000');
             gradIris.addColorStop(1, '#3a0000');
             ctx.fillStyle = gradIris;
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.arc(0, 0, 5.5, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#000000';
-            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.ellipse(0, 0, 1.4, 4.5, 0, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = 'rgba(255,255,255,0.6)';
             ctx.beginPath(); ctx.ellipse(-2.5, -2, 1.8, 1, -0.5, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#cc44ff';
             ctx.lineWidth = 1.2;
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.ellipse(0, 0, 11, 7.5, 0, 0, Math.PI * 2); ctx.stroke();
             ctx.strokeStyle = '#8e44ad';
             ctx.lineWidth = 0.8;
@@ -2334,8 +1674,6 @@ function dibujarEfectosEspeciales() {
             // Rayo externo
             ctx.strokeStyle = (r % 2 === 0) ? s.tipo.sparkColor : s.tipo.sparkColor2;
             ctx.lineWidth = w;
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(Math.cos(ang) * len2, Math.sin(ang) * len2);
             ctx.lineTo(Math.cos(ang) * len1, Math.sin(ang) * len1);
@@ -2359,8 +1697,6 @@ function dibujarEfectosEspeciales() {
         ctx.save();
         ctx.globalAlpha = alfa;
         ctx.fillStyle = p.color;
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
         ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
         ctx.restore();
     });
@@ -2370,8 +1706,6 @@ function dibujarEfectosEspeciales() {
         const alfa = Math.min(1, t.vida / (t.maxVida * 0.5));
         const escala = t.escala || 1;
         ctx.save();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
         ctx.fillStyle = t.color;
         ctx.globalAlpha = alfa;
         ctx.font = `${Math.round(6 * escala)}px 'Press Start 2P'`;
@@ -3346,8 +2680,6 @@ function dibujarCutscene() {
     ctx.stroke();
 
     // ── Sombra de texto para legibilidad sobre imágenes ──────────────────
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
 
     // ── TYPEWRITER: TÍTULO ──────────────────────────────────────────────
     if (cutsceneTituloIndex < slide.titulo.length) {
@@ -3369,10 +2701,7 @@ function dibujarCutscene() {
     ctx.fillStyle = slide.acento;
     ctx.font = "10px 'Press Start 2P'";
     ctx.textAlign = "center";
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.fillText(tituloVisible, 240, 28);
-    ctx.shadowBlur = 0;
     ctx.textAlign = "left";
 
     // ── TYPEWRITER: TEXTO NARRATIVO (con salto de línea automático y contorno) ─────
@@ -3432,8 +2761,7 @@ function dibujarCutscene() {
         }
     }
 
-    // ── NOMBRE DEL JUEGO (esquina inferior izquierda) ───────────────────
-    ctx.shadowBlur = 0; // Restaurar sombra
+    // ── NOMBRE DEL JUEGO (esquina inferior izquierda) ─────────────────── // Restaurar sombra
     ctx.fillStyle = "rgba(255,255,255,0.2)";
     ctx.font = "3.5px 'Press Start 2P'";
     ctx.fillText("LA SENDA DE MAMANI", 20, 260);
@@ -3554,10 +2882,7 @@ function dibujarTutorial() {
     if (sp) {
         ctx.strokeStyle = paso.color || "#ffcc00";
         ctx.lineWidth = 2;
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
         ctx.strokeRect(sp.x, sp.y, sp.w, sp.h);
-        ctx.shadowBlur = 0;
 
         // Flecha animada
         tutorialFlechaAnim += 0.08;
@@ -3758,8 +3083,6 @@ function dibujarPantallaMapa() {
 
         // Etiqueta tipo (encima del nodo)
         ctx.save();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
         ctx.fillStyle = "#ffffff";
         ctx.font = "4px 'Press Start 2P'";
         const labelTipo = nodo.label || nodo.tipo;
@@ -4164,8 +3487,6 @@ function dibujarPantallaCombate() {
 
     // 5. Texto de HP con sombra para legibilidad
     ctx.save();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = "5px 'Press Start 2P'";
     ctx.fillText(jugador.hp + "/" + jugador.hpMax + " HP", xHp + 4, yHp + 6);
@@ -4435,20 +3756,47 @@ function dibujarPantallaCombate() {
     ctx.translate(pivotX_E, pivotY_E);
     ctx.rotate(ae.inclinacion);
     ctx.scale(1, ae.escalaY);
-    if (ae.hitShake > 0) ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(5) brightness(1.5)';
-    else if (ae.shieldFlash > 0) ctx.filter = 'sepia(1) hue-rotate(180deg) saturate(4) brightness(1.2)';
-    else if (enemigo.faseActual === 2) {
+    let baseFilter = 'none';
+    if (enemigo.faseActual === 2) {
         if (enemigo.nombre.includes("Huiracocha")) {
-            ctx.filter = 'drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)) brightness(1.3) contrast(1.3) saturate(1.5)';
+            baseFilter = 'drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)) brightness(1.3) contrast(1.3) saturate(1.5)';
         } else if (enemigo.nombre.includes("El Jichi")) {
             // Jichi Fase 2: Rojo intenso (Jichi original es verde/cian, el hue-rotate lo vuelve rojo)
-            ctx.filter = 'drop-shadow(0 0 20px rgba(255, 0, 0, 0.9)) sepia(0.8) hue-rotate(280deg) saturate(6) brightness(0.9) contrast(1.5)';
+            baseFilter = 'drop-shadow(0 0 20px rgba(255, 0, 0, 0.9)) sepia(0.8) hue-rotate(280deg) saturate(6) brightness(0.9) contrast(1.5)';
         } else {
             // Tío de la Mina (Rojo infernal)
-            ctx.filter = 'drop-shadow(0 0 15px rgba(255, 0, 0, 0.9)) sepia(0.5) hue-rotate(-40deg) saturate(4) brightness(0.9) contrast(1.5)';
+            baseFilter = 'drop-shadow(0 0 15px rgba(255, 0, 0, 0.9)) sepia(0.5) hue-rotate(-40deg) saturate(4) brightness(0.9) contrast(1.5)';
         }
     }
-    if (spriteEnemigo && spriteEnemigo.complete && spriteEnemigo.naturalWidth !== 0) {
+
+    let usarCache = false;
+    if (enemigo.faseActual === 2 && ae.hitShake === 0 && ae.shieldFlash === 0) {
+        if (spriteEnemigo && spriteEnemigo.complete && spriteEnemigo.naturalWidth !== 0) {
+            usarCache = true;
+            if (!window.cacheEnemigoFase2 || window.lastFase2Sprite !== spriteEnemigo.src) {
+                window.cacheEnemigoFase2 = document.createElement('canvas');
+                window.cacheEnemigoFase2.width = drawW + 100;
+                window.cacheEnemigoFase2.height = drawH + 100;
+                const ctxOff = window.cacheEnemigoFase2.getContext('2d');
+                ctxOff.filter = baseFilter;
+                ctxOff.drawImage(spriteEnemigo, 50, 50, drawW, drawH);
+                window.lastFase2Sprite = spriteEnemigo.src;
+            }
+        }
+    }
+
+    if (ae.hitShake > 0) {
+        // Solo un filtro simple durante el golpe para evitar matar la GPU
+        ctx.filter = 'brightness(2) contrast(1.5)';
+    } else if (ae.shieldFlash > 0) {
+        ctx.filter = 'brightness(1.5) contrast(1.2)';
+    } else {
+        ctx.filter = usarCache ? 'none' : baseFilter;
+    }
+
+    if (usarCache) {
+        ctx.drawImage(window.cacheEnemigoFase2, -drawW / 2 - 50, -drawH - 50);
+    } else if (spriteEnemigo && spriteEnemigo.complete && spriteEnemigo.naturalWidth !== 0) {
         ctx.drawImage(spriteEnemigo, -drawW / 2, -drawH, drawW, drawH);
     } else {
         // Quirquincho geométrico de respaldo
@@ -4507,8 +3855,6 @@ function dibujarPantallaCombate() {
 
     // 5. Nombre y HP con sombra
     ctx.save();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = "5px 'Press Start 2P'";
     ctx.fillText(enemigo.nombre, xHpEnemigo, yHpEnemigo - 8);
@@ -4595,8 +3941,6 @@ function dibujarPantallaCombate() {
 
     // Icono y Texto con sombra
     ctx.save();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
 
     ctx.font = "6px 'Press Start 2P'";
@@ -4811,12 +4155,9 @@ function dibujarPantallaCombate() {
                 const gGlow = 0.5 + pulsoSel * 0.5;
                 ctx.strokeStyle = `rgba(255, 204, 0, ${gGlow})`;
                 ctx.lineWidth = 2;
-                ctx.shadowColor = "transparent";
-                ctx.shadowBlur = 0;
                 ctx.beginPath();
                 ctx.roundRect(cx - 1, cy - 1, cartaAncho + 2, cartaAlto + 2, 5);
                 ctx.stroke();
-                ctx.shadowBlur = 0;
             }
 
             // Base de la carta
@@ -4952,8 +4293,6 @@ function dibujarPantallaCombate() {
 
         // Texto con sombra
         ctx.save();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
         ctx.fillStyle = "#ffffff";
         ctx.font = "4px 'Press Start 2P'";
         ctx.fillText("🛡️+" + jugador.escudo, xEsc + 2, yEsc + 7);
@@ -5162,9 +4501,7 @@ function dibujarPantallaRecompensa() {
         const tGlow = 0.5 + 0.5 * Math.sin(Date.now() / 200);
         ctx.strokeStyle = "rgba(255,200,0," + (0.6 + tGlow * 0.4) + ")";
         ctx.lineWidth = 2.5;
-        ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
         ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, 8); ctx.stroke();
-        ctx.shadowBlur = 0;
 
         // Etiqueta
         ctx.fillStyle = "#f1c40f"; ctx.font = "4px 'Press Start 2P'"; ctx.textAlign = "center";
@@ -5268,10 +4605,8 @@ function dibujarPantallaTienda() {
     });
 
     // ── TOP: ORO | TÍTULO | SALIR ───────────────────────────────────────
-    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
     ctx.fillStyle = "#f1c40f"; ctx.font = "5px 'Press Start 2P'"; ctx.textAlign = "left";
     ctx.fillText("\uD83D\uDCB0 " + jugador.oro + "G", 8, 13);
-    ctx.shadowBlur = 0;
 
     ctx.fillStyle = "#ffcc00"; ctx.font = "6px 'Press Start 2P'"; ctx.textAlign = "center";
     ctx.fillText(datosTienda.nombre, 240, 13);
@@ -5323,7 +4658,7 @@ function dibujarPantallaTienda() {
             ctx.strokeStyle = isSel ? buff.color : (isMax ? "#f1c40f" : (hov ? "#c07020" : "#3a2208"));
             ctx.lineWidth = isSel ? 2.5 : 1.5;
             ctx.beginPath(); ctx.roundRect(bx, by, BW, BH, 7); ctx.fill(); ctx.stroke();
-            if (isSel) { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.stroke(); ctx.shadowBlur = 0; }
+            if (isSel) { ctx.stroke(); }
 
             // Icono
             ctx.font = "16px serif"; ctx.textAlign = "left"; ctx.fillText(buff.icono, bx + 7, by + 22);
@@ -5401,11 +4736,10 @@ function dibujarPantallaTienda() {
                 ctx.beginPath(); ctx.roundRect(cx, cy, CW, CH, 7); ctx.fill();
 
                 // Borde (glow dorado si seleccionado)
-                if (isSel) { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; }
+                if (isSel) { }
                 ctx.strokeStyle = isSel ? "#f1c40f" : (hov ? acent : "#3a2208");
                 ctx.lineWidth = isSel ? 2.5 : 1.5;
                 ctx.beginPath(); ctx.roundRect(cx, cy, CW, CH, 7); ctx.stroke();
-                ctx.shadowBlur = 0;
 
                 // Línea de acento superior (color de tipo)
                 ctx.strokeStyle = acent; ctx.lineWidth = 2;
@@ -5805,8 +5139,6 @@ function dibujarPantallaEvento() {
         // Sombra de elevación en hover
         ctx.save();
         if (hover) {
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
         }
 
         // Caja del botón
@@ -5876,8 +5208,6 @@ function dibujarPantallaGameOver() {
 
     // Texto de "FIN DEL JUEGO"
     ctx.save();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ff4d4d"; // Rojo sangre brillante
     ctx.font = "14px 'Press Start 2P'";
     ctx.textAlign = "center";
@@ -5935,8 +5265,6 @@ function dibujarPantallaVictoriaTotal() {
 
     // Título de la pantalla
     ctx.save();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffcc00"; // Oro
     ctx.font = "10px 'Press Start 2P'";
     ctx.textAlign = "center";
