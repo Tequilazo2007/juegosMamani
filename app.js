@@ -2144,8 +2144,8 @@ function dibujarEfectosEspeciales() {
             gradHoja.addColorStop(0.65, '#d8d8d8');
             gradHoja.addColorStop(1, '#707070');
             ctx.fillStyle = gradHoja;
-            ctx.shadowColor = '#ffffff';
-            ctx.shadowBlur = 7;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(-14, -2.5);   // talon de hoja
             ctx.lineTo(11, -0.5);    // punta superior
@@ -2157,7 +2157,7 @@ function dibujarEfectosEspeciales() {
             // Linea de filo brillante
             ctx.strokeStyle = 'rgba(255,255,255,0.9)';
             ctx.lineWidth = 0.8;
-            ctx.shadowBlur = 4;
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(-13, -2);
             ctx.lineTo(11, -0.5);
@@ -2196,8 +2196,8 @@ function dibujarEfectosEspeciales() {
             grad.addColorStop(0.4, p.cfg.proyectilColor2);
             grad.addColorStop(1, p.cfg.proyectilColor);
             ctx.fillStyle = grad;
-            ctx.shadowColor = p.cfg.proyectilColor;
-            ctx.shadowBlur = 12;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
@@ -2217,8 +2217,8 @@ function dibujarEfectosEspeciales() {
             grad.addColorStop(0.5, p.cfg.proyectilColor2);
             grad.addColorStop(1, p.cfg.proyectilColor);
             ctx.fillStyle = grad;
-            ctx.shadowColor = p.cfg.proyectilColor;
-            ctx.shadowBlur = 15;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
@@ -2235,8 +2235,8 @@ function dibujarEfectosEspeciales() {
             ctx.rotate(Math.sin(Date.now() / 120) * 0.3);
             const hs = 0.9 + Math.sin(Date.now() / 80) * 0.06;
             ctx.scale(hs, hs);
-            ctx.shadowColor = '#2ecc71';
-            ctx.shadowBlur = 12;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             const gradHoja2 = ctx.createLinearGradient(-8, -6, 8, 6);
             gradHoja2.addColorStop(0, '#145a32');
             gradHoja2.addColorStop(0.4, '#27ae60');
@@ -2248,7 +2248,7 @@ function dibujarEfectosEspeciales() {
             ctx.fill();
             ctx.strokeStyle = '#0b3a21';
             ctx.lineWidth = 0.9;
-            ctx.shadowBlur = 2;
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(-7, 1);
             ctx.quadraticCurveTo(0, -0.5, 7, -1);
@@ -2276,16 +2276,16 @@ function dibujarEfectosEspeciales() {
             // === MAL DE OJO: OJO MALIGNO GIRANDO ===
             ctx.rotate(Math.sin(Date.now() / 200) * 0.2);
             ctx.fillStyle = '#150025';
-            ctx.shadowColor = '#8e44ad';
-            ctx.shadowBlur = 16;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.ellipse(0, 0, 11, 7.5, 0, 0, Math.PI * 2); ctx.fill();
             const gradIris = ctx.createRadialGradient(0, 0, 0, 0, 0, 5.5);
             gradIris.addColorStop(0, '#ff2200');
             gradIris.addColorStop(0.5, '#990000');
             gradIris.addColorStop(1, '#3a0000');
             ctx.fillStyle = gradIris;
-            ctx.shadowColor = '#ff0000';
-            ctx.shadowBlur = 10;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.arc(0, 0, 5.5, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#000000';
             ctx.shadowBlur = 0;
@@ -2294,8 +2294,8 @@ function dibujarEfectosEspeciales() {
             ctx.beginPath(); ctx.ellipse(-2.5, -2, 1.8, 1, -0.5, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#cc44ff';
             ctx.lineWidth = 1.2;
-            ctx.shadowColor = '#cc44ff';
-            ctx.shadowBlur = 8;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.ellipse(0, 0, 11, 7.5, 0, 0, Math.PI * 2); ctx.stroke();
             ctx.strokeStyle = '#8e44ad';
             ctx.lineWidth = 0.8;
@@ -2334,8 +2334,8 @@ function dibujarEfectosEspeciales() {
             // Rayo externo
             ctx.strokeStyle = (r % 2 === 0) ? s.tipo.sparkColor : s.tipo.sparkColor2;
             ctx.lineWidth = w;
-            ctx.shadowColor = s.tipo.sparkColor;
-            ctx.shadowBlur = 6;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(Math.cos(ang) * len2, Math.sin(ang) * len2);
             ctx.lineTo(Math.cos(ang) * len1, Math.sin(ang) * len1);
@@ -2359,8 +2359,8 @@ function dibujarEfectosEspeciales() {
         ctx.save();
         ctx.globalAlpha = alfa;
         ctx.fillStyle = p.color;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 4;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
         ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
         ctx.restore();
     });
@@ -2370,8 +2370,8 @@ function dibujarEfectosEspeciales() {
         const alfa = Math.min(1, t.vida / (t.maxVida * 0.5));
         const escala = t.escala || 1;
         ctx.save();
-        ctx.shadowColor = '#000000';
-        ctx.shadowBlur = 5;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
         ctx.fillStyle = t.color;
         ctx.globalAlpha = alfa;
         ctx.font = `${Math.round(6 * escala)}px 'Press Start 2P'`;
@@ -3346,8 +3346,8 @@ function dibujarCutscene() {
     ctx.stroke();
 
     // ── Sombra de texto para legibilidad sobre imágenes ──────────────────
-    ctx.shadowColor = "#000000";
-    ctx.shadowBlur = 6;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
 
     // ── TYPEWRITER: TÍTULO ──────────────────────────────────────────────
     if (cutsceneTituloIndex < slide.titulo.length) {
@@ -3369,8 +3369,8 @@ function dibujarCutscene() {
     ctx.fillStyle = slide.acento;
     ctx.font = "10px 'Press Start 2P'";
     ctx.textAlign = "center";
-    ctx.shadowColor = slide.acento;
-    ctx.shadowBlur = 8;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
     ctx.fillText(tituloVisible, 240, 28);
     ctx.shadowBlur = 0;
     ctx.textAlign = "left";
@@ -3554,8 +3554,8 @@ function dibujarTutorial() {
     if (sp) {
         ctx.strokeStyle = paso.color || "#ffcc00";
         ctx.lineWidth = 2;
-        ctx.shadowColor = paso.color || "#ffcc00";
-        ctx.shadowBlur = 10;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
         ctx.strokeRect(sp.x, sp.y, sp.w, sp.h);
         ctx.shadowBlur = 0;
 
@@ -3758,8 +3758,8 @@ function dibujarPantallaMapa() {
 
         // Etiqueta tipo (encima del nodo)
         ctx.save();
-        ctx.shadowColor = "#000";
-        ctx.shadowBlur = 3;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
         ctx.fillStyle = "#ffffff";
         ctx.font = "4px 'Press Start 2P'";
         const labelTipo = nodo.label || nodo.tipo;
@@ -4164,8 +4164,8 @@ function dibujarPantallaCombate() {
 
     // 5. Texto de HP con sombra para legibilidad
     ctx.save();
-    ctx.shadowColor = "#000000";
-    ctx.shadowBlur = 4;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = "5px 'Press Start 2P'";
     ctx.fillText(jugador.hp + "/" + jugador.hpMax + " HP", xHp + 4, yHp + 6);
@@ -4507,8 +4507,8 @@ function dibujarPantallaCombate() {
 
     // 5. Nombre y HP con sombra
     ctx.save();
-    ctx.shadowColor = "#000000";
-    ctx.shadowBlur = 4;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = "5px 'Press Start 2P'";
     ctx.fillText(enemigo.nombre, xHpEnemigo, yHpEnemigo - 8);
@@ -4595,8 +4595,8 @@ function dibujarPantallaCombate() {
 
     // Icono y Texto con sombra
     ctx.save();
-    ctx.shadowColor = "#000000";
-    ctx.shadowBlur = 3;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
 
     ctx.font = "6px 'Press Start 2P'";
@@ -4811,8 +4811,8 @@ function dibujarPantallaCombate() {
                 const gGlow = 0.5 + pulsoSel * 0.5;
                 ctx.strokeStyle = `rgba(255, 204, 0, ${gGlow})`;
                 ctx.lineWidth = 2;
-                ctx.shadowColor = "#ffcc00";
-                ctx.shadowBlur = 6;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
                 ctx.beginPath();
                 ctx.roundRect(cx - 1, cy - 1, cartaAncho + 2, cartaAlto + 2, 5);
                 ctx.stroke();
@@ -4952,8 +4952,8 @@ function dibujarPantallaCombate() {
 
         // Texto con sombra
         ctx.save();
-        ctx.shadowColor = "#000000";
-        ctx.shadowBlur = 3;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
         ctx.fillStyle = "#ffffff";
         ctx.font = "4px 'Press Start 2P'";
         ctx.fillText("🛡️+" + jugador.escudo, xEsc + 2, yEsc + 7);
@@ -5162,7 +5162,7 @@ function dibujarPantallaRecompensa() {
         const tGlow = 0.5 + 0.5 * Math.sin(Date.now() / 200);
         ctx.strokeStyle = "rgba(255,200,0," + (0.6 + tGlow * 0.4) + ")";
         ctx.lineWidth = 2.5;
-        ctx.shadowColor = "#f1c40f"; ctx.shadowBlur = 10;
+        ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
         ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, 8); ctx.stroke();
         ctx.shadowBlur = 0;
 
@@ -5268,7 +5268,7 @@ function dibujarPantallaTienda() {
     });
 
     // ── TOP: ORO | TÍTULO | SALIR ───────────────────────────────────────
-    ctx.shadowColor = "#f1c40f"; ctx.shadowBlur = 5;
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
     ctx.fillStyle = "#f1c40f"; ctx.font = "5px 'Press Start 2P'"; ctx.textAlign = "left";
     ctx.fillText("\uD83D\uDCB0 " + jugador.oro + "G", 8, 13);
     ctx.shadowBlur = 0;
@@ -5323,7 +5323,7 @@ function dibujarPantallaTienda() {
             ctx.strokeStyle = isSel ? buff.color : (isMax ? "#f1c40f" : (hov ? "#c07020" : "#3a2208"));
             ctx.lineWidth = isSel ? 2.5 : 1.5;
             ctx.beginPath(); ctx.roundRect(bx, by, BW, BH, 7); ctx.fill(); ctx.stroke();
-            if (isSel) { ctx.shadowColor = buff.color; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0; }
+            if (isSel) { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.stroke(); ctx.shadowBlur = 0; }
 
             // Icono
             ctx.font = "16px serif"; ctx.textAlign = "left"; ctx.fillText(buff.icono, bx + 7, by + 22);
@@ -5401,7 +5401,7 @@ function dibujarPantallaTienda() {
                 ctx.beginPath(); ctx.roundRect(cx, cy, CW, CH, 7); ctx.fill();
 
                 // Borde (glow dorado si seleccionado)
-                if (isSel) { ctx.shadowColor = "#f1c40f"; ctx.shadowBlur = 10; }
+                if (isSel) { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; }
                 ctx.strokeStyle = isSel ? "#f1c40f" : (hov ? acent : "#3a2208");
                 ctx.lineWidth = isSel ? 2.5 : 1.5;
                 ctx.beginPath(); ctx.roundRect(cx, cy, CW, CH, 7); ctx.stroke();
@@ -5805,8 +5805,8 @@ function dibujarPantallaEvento() {
         // Sombra de elevación en hover
         ctx.save();
         if (hover) {
-            ctx.shadowColor = "#f1c40f";
-            ctx.shadowBlur = 8;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
         }
 
         // Caja del botón
@@ -5876,8 +5876,8 @@ function dibujarPantallaGameOver() {
 
     // Texto de "FIN DEL JUEGO"
     ctx.save();
-    ctx.shadowColor = "#000000";
-    ctx.shadowBlur = 6;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ff4d4d"; // Rojo sangre brillante
     ctx.font = "14px 'Press Start 2P'";
     ctx.textAlign = "center";
@@ -5935,8 +5935,8 @@ function dibujarPantallaVictoriaTotal() {
 
     // Título de la pantalla
     ctx.save();
-    ctx.shadowColor = "#ffcc00";
-    ctx.shadowBlur = 4;
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffcc00"; // Oro
     ctx.font = "10px 'Press Start 2P'";
     ctx.textAlign = "center";
